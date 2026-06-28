@@ -1,8 +1,8 @@
 # ============================================================
 # Dockerfile for morphe-cli (Android app patching tool)
-# Source: https://github.com/MorpheApp/morphe-cli
-# Latest stable release: v1.9.0 (2026-05-29)
-# Releases page: https://github.com/MorpheApp/morphe-cli/releases
+# Source:   https://github.com/MorpheApp/morphe-cli
+# Releases: https://github.com/MorpheApp/morphe-cli/releases
+# Always fetches the latest stable release at build time.
 # ============================================================
 
 # Use a slim JDK 17 image — morphe-cli is a JVM/Kotlin fat JAR
@@ -15,26 +15,30 @@ LABEL org.opencontainers.image.title="morphe-cli" \
       org.opencontainers.image.source="https://github.com/MorpheApp/morphe-cli" \
       org.opencontainers.image.licenses="GPL-3.0"
 
-# ── Version pin — update this when a new release drops ──────
-# Check: https://github.com/MorpheApp/morphe-cli/releases
-ARG MORPHE_VERSION=1.9.0
-
 # ── System dependencies ──────────────────────────────────────
 # curl  : download the JAR from GitHub releases
+# jq    : parse the GitHub API response to extract the latest version tag
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl \
+        jq \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Working directory ────────────────────────────────────────
 WORKDIR /morphe
 
-# ── Download morphe-cli fat JAR from GitHub releases ────────
-# The "-all.jar" suffix is the shadow/fat jar that bundles all deps.
-# Ref: https://github.com/MorpheApp/morphe-cli/releases/tag/v${MORPHE_VERSION}
-RUN curl -fsSL \
-    "https://github.com/MorpheApp/morphe-cli/releases/download/v${MORPHE_VERSION}/morphe-cli-${MORPHE_VERSION}-all.jar" \
-    -o morphe-cli.jar
+# ── Download the latest morphe-cli fat JAR from GitHub releases ─
+# Uses the GitHub API to resolve the latest tag, then downloads the
+# corresponding -all.jar (shadow/fat jar with all deps bundled).
+# API ref: https://docs.github.com/en/rest/releases/releases#get-the-latest-release
+# Releases: https://github.com/MorpheApp/morphe-cli/releases
+RUN MORPHE_VERSION=$(curl -fsSL \
+        "https://api.github.com/repos/MorpheApp/morphe-cli/releases/latest" \
+        | jq -r '.tag_name | ltrimstr("v")') && \
+    echo "Downloading morphe-cli v${MORPHE_VERSION}" && \
+    curl -fsSL \
+        "https://github.com/MorpheApp/morphe-cli/releases/download/v${MORPHE_VERSION}/morphe-cli-${MORPHE_VERSION}-all.jar" \
+        -o morphe-cli.jar
 
 # ── Create a non-root user for security ─────────────────────
 RUN useradd -m -u 1000 morphe
